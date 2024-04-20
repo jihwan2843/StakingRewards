@@ -6,6 +6,10 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract StakingRewards {
+    /*
+    한 유저당 총 보상을 받을 개수
+    Sigma (stakingAmountAtTime / totalStakingAmountAtTime) 보상을 받을 비율 * rewardPerBlock
+    */
     address private owner;
 
     IERC20 public stakingToken;
@@ -106,6 +110,22 @@ contract StakingRewards {
         periodFinish = block.timestamp + rewardsDuration;
     }
 
+    // 마지막 업데이트 시간을 현재 블록 시간으로 설정
+    modifier updateReward(address account) {
+        // 현재 시점에서 토큰당 리워드의 총합을 구한다.
+        rewardPerTokenStored = rewardPerToken();
+        lastUpdateTime = lastTimeRewardApplicable();
+        if (account != address(0)) {
+            rewards[account] = earned(account);
+            userRewardPerTokenPaid[account] = rewardPerTokenStored;
+        }
+        _;
+    }
+
+    function lastTimeRewardApplicable() public view returns (uint256) {
+        return block.timestamp < periodFinish ? block.timestamp : periodFinish;
+    }
+
     /* rewardPerToken:
         구간에서 스테이킹 토큰 하나당 보상 토큰의 개수를 의미.
         예: 총 스테이킹량이 100개이고 구간 전체 보상이 5개인 경우에 스테이킹 토큰당 보상 리워드는 5/100개이다.
@@ -124,27 +144,15 @@ contract StakingRewards {
             _totalSupply;
     }
 
+    // 지금까지 나의 총 보상을 조회
     function earned(address account) public view returns (uint256) {
         // _balances[account] * rewardPerToken() -> account의 전체 구간의 보상
+        // _balances[account] * userRewardPerTokenPaid[account] -> 이미 계산된 바로 전 구간의 보상
+        // rewards[account] -> account가 출금 가능한 누적된 보상
         return
             (_balances[account] *
                 (rewardPerToken() - userRewardPerTokenPaid[account])) /
             1e18 +
             rewards[account];
-    }
-
-    // 마지막 업데이트 시간을 현재 블록 시간으로 설정
-    modifier updateReward(address account) {
-        lastUpdateTime = lastTimeRewardApplicable();
-        rewardPerTokenStored = rewardPerToken();
-        if (account != address(0)) {
-            rewards[account] = earned(account);
-            userRewardPerTokenPaid[account] = rewardPerTokenStored;
-        }
-        _;
-    }
-
-    function lastTimeRewardApplicable() public view returns (uint256) {
-        return block.timestamp < periodFinish ? block.timestamp : periodFinish;
     }
 }
